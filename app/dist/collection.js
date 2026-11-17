@@ -95,17 +95,6 @@ function shopTabsNav() {
   </div>`;
 }
 
-function shopEventBanner() {
-  return `<div class="shop-event-strip" data-shop-view="calendar" role="button" tabindex="0" aria-label="查看 11–12 月循環活動日曆">
-    <div class="shop-event-strip-icon">${icon('calendar', 22)}</div>
-    <div class="shop-event-strip-info">
-      <strong>11–12 月 Re-KEA 循環活動日曆已上線</strong>
-      <p>週末二手市集 · 老椅凳編織 DIY · 五金零件免費交換所</p>
-    </div>
-    <span class="shop-event-strip-action">查看日曆 ${icon('arrow-right', 14)}</span>
-  </div>`;
-}
-
 function searchTools() {
   return `<div class="shop-tools"><label class="shop-search">${icon('search', 18)}<input type="search" data-shop-filter="query" aria-label="搜尋館藏家具" placeholder="搜尋桌、椅、櫃、原件或編號…" value="${esc(filters.query)}"></label><details class="shop-filter-details"><summary>篩選與排序<span>分類、品相、人生階段</span></summary><div class="shop-categories" aria-label="家具分類">${['全部', '桌類', '椅類', '櫃類'].map(value => `<button data-shop="category" data-value="${value}" aria-pressed="${filters.category === value}">${value === '全部' ? '全部品項' : value}</button>`).join('')}</div><div class="shop-refinements"><label>品相分級<select data-shop-filter="grade" aria-label="品相分級">${['全部', 'A 級珍藏', 'B 級溫潤歲月'].map(value => `<option value="${value}" ${value === filters.grade ? 'selected' : ''}>${value === '全部' ? '不限分級' : value}</option>`).join('')}</select></label><label>排序方式<select data-shop-filter="sort" aria-label="排序方式"><option value="curated" ${filters.sort === 'curated' ? 'selected' : ''}>策展推薦</option><option value="price-asc" ${filters.sort === 'price-asc' ? 'selected' : ''}>價格：由低到高</option><option value="carbon-desc" ${filters.sort === 'carbon-desc' ? 'selected' : ''}>減碳量：由高到低</option></select></label></div><label class="shop-growth"><input type="checkbox" data-shop-filter="growth" ${filters.growth ? 'checked' : ''}>跟著人生階段走</label></details></div>`;
 }
@@ -359,7 +348,6 @@ function renderList() {
         <p>每件作品皆於各地工坊進行修繕，延續它的故事</p>
       </section>
       ${shopTabsNav()}
-      ${shopEventBanner()}
       ${searchTools()}
       <div class="shop-result-meta"><span id="shop-count" aria-live="polite"></span><span>附完整工坊修復認證</span></div>
       <section class="shop-results" id="shop-results" aria-label="再生家具列表"></section>
