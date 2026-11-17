@@ -1,4 +1,6 @@
 const paths = {
+  'shopping-bag': '<path d="M5 7h14l1 14H4Zm3 0V6a4 4 0 0 1 8 0v1M8 11V7m8 4V7"/>',
+  minus: '<path d="M5 12h14"/>',
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

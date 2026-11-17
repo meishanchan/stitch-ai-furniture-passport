@@ -1,3 +1,4 @@
+import { renderCollectionRoute } from './collection.js';
 import { furniture } from './catalog.js';
 import { detailViews, parseRoute, routeFor, restoreState, swipeDestination } from './core.js';
 import { icon } from './icons.js';
@@ -35,18 +36,18 @@ function toast(message) {
   toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 2600);
 }
 function navigate(view = 'home', id = selected().id) {
-  const target = routeFor(view, id);
+  const target = view === 'collection' ? '#/collection' : routeFor(view, id);
   if (location.hash === target) renderRoute();
   else location.hash = target;
 }
 function navButton(view, symbol, label, active) {
   return `<button class="nav-button${active ? ' active' : ''}" data-view="${view}" ${active ? 'aria-current="page"' : ''}>${icon(symbol,23)}<span>${label}</span></button>`;
 }
-function homeNav() {
-  return `<nav class="bottom-nav" aria-label="主要導覽">${navButton('home','home','目錄',true)}<button class="nav-button nav-add" data-action="add" aria-label="新增家具履歷">${icon('plus',26)}</button><button class="nav-button" data-action="profile">${icon('person',23)}<span>輪廓</span></button></nav>`;
+function homeNav(collectionActive = false) {
+  return `<nav class="bottom-nav" aria-label="主要導覽">${navButton('collection','box','館藏',collectionActive)}<button class="nav-button nav-add" data-action="add" aria-label="新增家具履歷">${icon('plus',26)}</button><button class="nav-button" data-action="profile">${icon('person',23)}<span>輪廓</span></button></nav>`;
 }
 function detailNav() {
-  return `<nav class="bottom-nav" aria-label="家具頁面切換">${navButton('home','home','目錄',false)}${navButton('passport','document','履歷',route.view==='passport')}${navButton('inspection','scan','檢測',route.view==='inspection')}${navButton('buyback','refresh-cw','回購',route.view==='buyback')}</nav>`;
+  return `<nav class="bottom-nav" aria-label="家具頁面切換">${navButton('collection','box','館藏',false)}${navButton('passport','document','履歷',route.view==='passport')}${navButton('inspection','scan','檢測',route.view==='inspection')}${navButton('buyback','refresh-cw','回購',route.view==='buyback')}</nav>`;
 }
 function itemButton(item) {
   const favorite = saved.favorites.includes(item.id);
@@ -144,6 +145,15 @@ function refreshPage(view) {
   if (element) { const top=element.scrollTop; element.innerHTML=detailContent(view,selected()); element.scrollTop=top; }
 }
 function renderRoute() {
+  closeSheet();
+  clearTimeout(scrollTimer);
+  clearTimeout(navigationTimer);
+  if (renderCollectionRoute({ nav: () => homeNav(true), showSheet, closeSheet, toast })) {
+    route = { view: 'collection', itemId: null };
+    activeDeckItem = null;
+    updateOffline();
+    return;
+  }
   route = parseRoute(location.hash, ids);
   if (route.itemId) {saved.selectedId=route.itemId;persist();renderDetails();}
   else renderHome();
