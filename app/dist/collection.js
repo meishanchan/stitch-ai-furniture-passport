@@ -78,7 +78,7 @@ function bagButton() {
 function header(detail = false) {
   const isCal = subView === 'calendar' && !detail;
   const backAction = detail ? 'data-shop="back"' : isCal ? 'data-shop="back-to-furniture"' : 'data-view="home"';
-  const backLabel = detail ? '返回館藏' : isCal ? '返回策展家具' : '返回我的家具';
+  const backLabel = detail ? '返回館藏' : isCal ? '返回精選好物' : '返回我的家具';
   const title = detail ? '館藏' : isCal ? '循環活動日曆' : 'Archive';
   return `<header class="app-header shop-header"><button class="icon-button" ${backAction} aria-label="${backLabel}">${icon('arrow-left', 21)}</button><h1 class="app-title">${title}</h1>${bagButton()}</header>`;
 }
@@ -86,11 +86,10 @@ function header(detail = false) {
 function shopTabsNav() {
   return `<div class="shop-tabs-nav" role="tablist" aria-label="館藏分頁切換">
     <button class="shop-tab-pill ${subView === 'furniture' ? 'active' : ''}" data-shop-view="furniture" role="tab" aria-selected="${subView === 'furniture'}">
-      ${icon('box', 16)} 策展家具 (${collection.length})
+      ${icon('box', 16)} 精選好物
     </button>
     <button class="shop-tab-pill ${subView === 'calendar' ? 'active' : ''}" data-shop-view="calendar" role="tab" aria-selected="${subView === 'calendar'}">
       ${icon('calendar', 16)} 循環活動日曆
-      <span class="shop-tab-badge">${events.length}場</span>
     </button>
   </div>`;
 }
