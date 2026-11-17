@@ -167,7 +167,7 @@ function renderEventCard(evt) {
     <div class="event-card-footer">
       <div class="event-card-stats">
         <span class="event-fee">${esc(evt.fee.split('（')[0])}</span>
-        <span class="event-carbon">🌿 減碳 ${evt.carbonSavedKg} kg</span>
+        <span class="event-carbon">減碳 ${evt.carbonSavedKg} kg</span>
       </div>
       <span class="event-card-action">查看詳情 ${icon('arrow-right', 13)}</span>
     </div>
@@ -203,8 +203,8 @@ function renderCalendarView() {
 
     <div class="calendar-filter-bar" role="tablist" aria-label="活動類型篩選">
       <button class="calendar-filter-chip ${eventFilter === 'all' ? 'active' : ''}" data-calendar-filter="all">全部活動 (${events.length})</button>
-      <button class="calendar-filter-chip ${eventFilter === 'market' ? 'active' : ''}" data-calendar-filter="market">♻️ 循環市集 (${events.filter(e => e.type === 'market').length})</button>
-      <button class="calendar-filter-chip ${eventFilter === 'diy' ? 'active' : ''}" data-calendar-filter="diy">🔨 手作 DIY (${events.filter(e => e.type === 'diy').length})</button>
+      <button class="calendar-filter-chip ${eventFilter === 'market' ? 'active' : ''}" data-calendar-filter="market">循環市集 (${events.filter(e => e.type === 'market').length})</button>
+      <button class="calendar-filter-chip ${eventFilter === 'diy' ? 'active' : ''}" data-calendar-filter="diy">手作 DIY (${events.filter(e => e.type === 'diy').length})</button>
     </div>
 
     <div class="calendar-month-card">
@@ -288,8 +288,8 @@ function renderEventDetailSheet(evt) {
         <span class="event-tag-pill">${esc(evt.tag)}</span>
       </div>
       <h2 class="event-detail-title">${esc(evt.title)}</h2>
-      <p class="event-detail-time">📅 ${evt.date} (${evt.weekday}) ${evt.time}</p>
-      <p class="event-detail-location">📍 ${esc(evt.location)}<br><small class="event-detail-address">${esc(evt.address)}</small></p>
+      <p class="event-detail-time">${icon('calendar', 14)} <span>${evt.date} (${evt.weekday}) ${evt.time}</span></p>
+      <p class="event-detail-location">${icon('store', 14)} <span>${esc(evt.location)}</span><br><small class="event-detail-address">${esc(evt.address)}</small></p>
     </div>
 
     <div class="event-stat-grid">
@@ -547,7 +547,7 @@ document.addEventListener('click', event => {
   if (calShare) {
     const evt = getEvent(calShare.dataset.calendarShare);
     if (evt) {
-      const text = `${evt.title}\n📅 ${evt.date} (${evt.weekday}) ${evt.time}\n📍 ${evt.location}\n${location.origin}${location.pathname}#/collection/calendar/${evt.id}`;
+      const text = `${evt.title}\n時間：${evt.date} (${evt.weekday}) ${evt.time}\n地點：${evt.location}\n${location.origin}${location.pathname}#/collection/calendar/${evt.id}`;
       try {
         if (navigator.clipboard) {
           navigator.clipboard.writeText(text);
