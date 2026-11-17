@@ -1,0 +1,7 @@
+artifacts/
+.DS_Store
+node_modules/
+*.tar.gz
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

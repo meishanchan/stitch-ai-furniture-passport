@@ -24,5 +24,10 @@ export function restoreState(raw, ids) {
     const booking = source.bookings[id];
     if (booking && typeof booking === 'object' && typeof booking.code === 'string') bookings[id] = booking;
   }
-  return { favorites: valid(source.favorites), reports: valid(source.reports), selectedId: ids.includes(source.selectedId) ? source.selectedId : ids[0], bookings };
+  const memories = {};
+  if (source.memories && typeof source.memories === 'object') for (const id of ids) {
+    const entries = source.memories[id];
+    if (Array.isArray(entries)) memories[id] = entries.filter(entry => entry && typeof entry.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && typeof entry.text === 'string' && entry.text.trim()).map(({ date, text }) => ({ date, text }));
+  }
+  return { favorites: valid(source.favorites), reports: valid(source.reports), selectedId: ids.includes(source.selectedId) ? source.selectedId : ids[0], bookings, memories };
 }

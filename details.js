@@ -12,37 +12,36 @@ const sample = '<span class="d-sample">示範資料</span>';
 const heading = (title, meta = '') => `<div class="d-section-heading"><h2>${title}</h2>${meta ? `<span>${meta}</span>` : ''}</div>`;
 const action = (label, name, secondary = false, glyph = 'arrow-right') => `<button class="d-button${secondary ? ' d-button-secondary' : ''}" type="button" data-action="${name}"><span>${label}</span>${glyph ? icon(glyph, 18) : ''}</button>`;
 
-export function renderPassport(item) {
+export function renderPassport(item, state = {}) {
   const isMicke = item.id === 'micke-desk';
   const entryYear = escape(item.year);
+  const today = state.today || new Date();
+  const days = Math.max(0, Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(Number(item.year), 3, 1)) / 86400000));
+  const events = [
+    { date: '2026-03-01', text: '影像掃描與狀態檢視：結構評估良好，可進一步評估回購與循環整新。', note: `數位履歷 · 模擬檢測記錄 · 評定 ${grade(item)}`, sample: true },
+    { date: '2025-05-01', text: '無數歡笑與深夜傾談，都在這裡留下生活的溫度。', note: '生活記憶 · 示範紀錄', sample: true },
+    { date: '2024-08-01', text: '表面微瑕修護保養：清潔表面並檢視日常使用痕跡。', note: '保養方式：自行養護 · 示範紀錄', sample: true },
+    { date: `${Math.max(number(item.year, 2022), 2022)}-11-01`, text: isMicke ? '零件維護記錄：檢視右側抽屜滑軌與連接螺絲。' : '零件維護記錄：檢視結構連接處與固定配件。', note: '日常維護 · 示範紀錄', sample: true },
+    { date: `${item.year}-04-01`, text: `${item.name}入庫，建立家具電子身分履歷。`, note: `典藏編號：${item.code} · 示範紀錄`, sample: true },
+    ...(state.memories || []).map(entry => ({ ...entry, note: '生活記憶' })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
   return `<div class="d-page d-passport">
     <section class="d-specimen" aria-labelledby="d-item-title">
       <div class="d-hero-object">${image(item, 'd-hero-image')}<span class="d-scale">SCALE · 1:15</span></div>
       <div class="d-specimen-caption">
         <p class="d-archive-meta"><i aria-hidden="true"></i>家具數位典藏 · ${entryYear} 入庫</p>
-        <h1 id="d-item-title">${escape(item.name)}</h1>
-        <p>${escape(item.description)} · ${escape(item.dimensions)}</p>
-        <p class="d-material-caption">${escape(item.material)}</p>
+        <div class="d-title-row"><h1 id="d-item-title">${escape(item.name)}</h1><span class="d-companion">陪伴 ${money(days)} 天</span></div>
+        <p class="d-material-caption">${escape(item.material)} <span aria-hidden="true">·</span> ${escape(item.dimensions)}</p>
       </div>
     </section>
 
     <section>
-      ${heading('健康度檢測指標', sample)}
-      <div class="d-metric-list">
-        <div class="d-metric"><div><h3>結構穩固度</h3><p>五金主結構及承重咬合狀況</p></div><strong>${isMicke ? 92 : Math.min(100, score(item) + 8)}%</strong></div>
-        <div class="d-metric"><div><h3>${isMicke ? '桌面平整度' : '表面完整度'}</h3><p>${isMicke ? '封邊角具極輕微使用紋路' : '表面與邊角使用痕跡檢視'}</p></div><strong>${isMicke ? 88 : Math.min(100, score(item) + 4)}%</strong></div>
-        <div class="d-metric"><div><h3>模組拆解替換性</h3><p>標準化鎖件及組裝配件狀況</p></div><strong>100%</strong></div>
+      <div class="d-section-heading d-timeline-heading">
+        <div class="d-timeline-title"><h2>生活時間軸</h2><span>共 ${events.length} 筆</span></div>
+        <button class="d-add-memory" type="button" data-action="add-memory">${icon('plus', 15)} 新增生活紀錄</button>
       </div>
-      <button class="d-text-link d-inline-inspection" type="button" data-action="go-inspection">查看 AI 品質檢測報告 ${icon('arrow-right', 15)}</button>
-    </section>
-
-    <section>
-      ${heading('歷程檔案時間軸', '共 4 筆示範記錄')}
       <ol class="d-timeline">
-        <li class="d-timeline-current"><div class="d-log-date">2026.03 <span class="d-small-tag">評定 ${grade(item)}</span></div><p>影像掃描與狀態檢視：結構評估良好，可進一步評估回購與循環整新。</p><span class="d-log-note">數位履歷 · 模擬檢測記錄</span></li>
-        <li><div class="d-log-date">2024.08</div><p>表面微瑕修護保養：清潔表面並檢視日常使用痕跡。</p><span class="d-log-note">保養方式：自行養護</span></li>
-        <li><div class="d-log-date">${Math.max(number(item.year, 2022), 2022)}.11</div><p>${isMicke ? '零件維護記錄：檢視右側抽屜滑軌與連接螺絲。' : '零件維護記錄：檢視結構連接處與固定配件。'}</p><span class="d-log-note">登錄類型：日常維護</span></li>
-        <li><div class="d-log-date">${entryYear}.04</div><p>${escape(item.name)}入庫，建立家具電子身分履歷。</p><span class="d-log-note">典藏編號：${escape(item.code)}</span></li>
+        ${events.map((entry, index) => `<li${index === 0 ? ' class="d-timeline-current"' : ''}><div class="d-log-date">${escape(entry.date.replaceAll('-', '.'))}${!entry.sample ? '<span class="d-small-tag">生活記憶</span>' : ''}</div><p>${escape(entry.text)}</p><span class="d-log-note">${escape(entry.note)}</span></li>`).join('')}
       </ol>
     </section>
 
@@ -68,12 +67,30 @@ export function renderPassport(item) {
   </div>`;
 }
 
+const inspectionAngles = [
+  { label: '正面', hint: '讓家具完整入鏡' },
+  { label: '側面', hint: '拍下家具側邊與結構' },
+  { label: '細節', hint: '靠近拍攝表面或使用痕跡' },
+];
+
+export function renderInspectionCapture(item, photos = []) {
+  const count = photos.filter(Boolean).length;
+  return `<p class="inspection-capture-intro">依序拍攝 ${escape(item.name)} 的三個角度，也可以選擇現有照片。</p>
+    <div class="inspection-capture-list">${inspectionAngles.map((angle, index) => `<div class="inspection-capture-row">
+      <div class="inspection-capture-thumb">${photos[index] ? `<img src="${safeImage(photos[index])}" alt="${angle.label}照片預覽">` : icon('camera', 20)}</div>
+      <div class="inspection-capture-copy"><strong>${angle.label}</strong><span>${angle.hint}</span></div>
+      <button type="button" class="inspection-capture-button" data-action="capture-angle" data-angle="${index}" aria-label="${photos[index] ? '重新拍攝' : '拍攝'}${angle.label}">${photos[index] ? '重新拍攝' : '拍攝'}</button>
+    </div>`).join('')}</div>
+    <p class="inspection-capture-note">${count} / 3 張照片 · 照片僅在本次使用時保留，不會上傳。</p>
+    <button class="primary-button" type="button" data-action="inspect-analyze" ${count === 3 ? '' : 'disabled'}>開始示範分析 ${icon('arrow-right', 18)}</button>
+    <p class="inspection-capture-disclaimer">分析結果為預設示範資料，並非實際影像辨識。</p>`;
+}
+
 export function renderInspection(item, state = {}) {
   const isMicke = item.id === 'micke-desk';
   const scanning = state.inspectionStatus === 'scanning';
   const completed = state.inspectionStatus === 'done';
-  const photoUrl = state.photoUrl ? safeImage(state.photoUrl) : '';
-  const detailImage = isMicke ? './assets/furniture/micke-detail.png' : item.image;
+  const photos = Array.isArray(state.photos) ? state.photos : [];
   const currentScore = isMicke ? 84 : score(item);
   return `<div class="d-page d-inspection">
     <section class="d-inspection-identity">
@@ -82,18 +99,15 @@ export function renderInspection(item, state = {}) {
     </section>
 
     <section class="d-report-summary" aria-live="polite">
-      <div class="d-score-row"><div class="d-score"><strong>${scanning ? '—' : currentScore}</strong><span>/ 100</span></div><span class="d-grade">${scanning ? '正在分析影像' : `等級 ${grade(item)}（良好微痕跡）`}</span></div>
-      <div class="d-condition-note">${icon(scanning ? 'scan' : 'check-circle', 20)}<p>${scanning ? '正在比對家具輪廓、表面與連接部位，請稍候。' : `結構完整穩固，${isMicke ? '桌面邊緣有 2 處細微擦傷' : '表面可見輕微日常使用痕跡'}，建議進一步檢視並評估循環整新。`}</p></div>
+      <div class="d-score-row"><div class="d-score"><strong>${scanning ? '—' : currentScore}</strong><span>/ 100</span></div><span class="d-grade">${scanning ? '示範分析中' : `等級 ${grade(item)}（良好微痕跡）`}</span></div>
+      <div class="d-condition-note">${icon(scanning ? 'scan' : 'check-circle', 20)}<p>${scanning ? '正在產生示範結果，請稍候。' : `結構完整穩固，${isMicke ? '桌面邊緣有 2 處細微擦傷' : '表面可見輕微日常使用痕跡'}，建議進一步檢視並評估循環整新。`}</p></div>
       <div class="d-report-state"><span>${completed ? '模擬檢測已完成' : scanning ? '模擬檢測進行中' : '以下為家具狀態示範報告'}</span>${sample}</div>
     </section>
 
     <section class="d-visual-inspection">
-      <div class="d-section-heading d-gallery-heading"><div><h2>多角度影像檢測</h2><p>AI 多軸比對及表面微刮痕幾何定位</p></div><span>2 處採樣</span></div>
-      <div class="d-inspection-gallery${scanning ? ' d-is-scanning' : ''}">
-        <figure class="d-inspection-figure"><div class="d-inspection-image">${photoUrl ? `<img src="${photoUrl}" alt="使用者選取的${escape(item.name)}檢測照片" class="d-uploaded-image">` : image(item)}<div class="d-frame-marker"><span>ROI_A1: FRAME</span><span>ALIGN: OK</span></div>${scanning ? '<div class="d-scan-line"></div>' : ''}</div><figcaption><div><strong>${photoUrl ? '上傳影像' : '正面全景'}</strong><span>${Math.min(100, currentScore + 12)}%</span></div><p>${photoUrl ? '已選取照片供模擬檢測' : '主體架構完整、無傾斜'}</p></figcaption></figure>
-        <figure class="d-inspection-figure"><div class="d-inspection-image d-detail-image">${image(item, isMicke ? '' : 'd-item-crop', detailImage)}<div class="d-defect-marker"><i></i></div><span class="d-defect-label">DEF_02: ${isMicke ? '1.2cm' : 'SURFACE'}</span></div><figcaption><div><strong>${isMicke ? '桌面細節' : '表面細節'}</strong><span>已記錄</span></div><p>${isMicke ? '邊緣輕微 1.2cm 磨損痕跡' : '日常使用痕跡示意'}</p></figcaption></figure>
-      </div>
-      <div class="d-inspection-controls"><button class="d-button d-button-secondary" type="button" data-action="capture">${icon('camera', 17)}<span>${photoUrl ? '更換照片' : '上傳檢測照片'}</span></button><button class="d-button d-button-secondary" type="button" data-action="inspect-start" ${scanning ? 'disabled' : ''}>${icon('scan', 17)}<span>${scanning ? '檢測中…' : completed ? '重新模擬檢測' : '執行模擬檢測'}</span></button></div>
+      <div class="d-gallery-heading"><h2>多角度影像檢測</h2><p>拍攝正面、側面與細節，留下家具的完整紀錄。</p></div>
+      <button class="d-button d-inspection-start" type="button" data-action="inspect-start" ${scanning ? 'disabled' : ''}>${icon('camera', 19)}<span>${scanning ? '示範分析中…' : photos.length ? '重新檢測' : '開始檢測'}</span></button>
+      ${photos.length ? `<div class="d-gallery-meta"><strong>檢測照片</strong><span>${photos.length} 張</span></div><div class="d-inspection-gallery">${photos.map((url, index) => `<figure class="d-inspection-figure"><div class="d-inspection-image"><img src="${safeImage(url)}" alt="${escape(item.name)}的${inspectionAngles[index]?.label || '檢測'}照片" class="d-uploaded-image"></div><figcaption>${inspectionAngles[index]?.label || '檢測照片'}</figcaption></figure>`).join('')}</div><p class="d-photo-note">照片僅在本次使用時保留，不會上傳。</p>` : `<div class="d-inspection-empty"><span>${icon('camera', 22)}</span><div><strong>尚未加入照片</strong><p>開始檢測後，依照指引拍攝或選取照片。</p></div></div>${completed ? '<p class="d-photo-note">照片僅在本次使用時保留；重新整理後可再次拍攝。</p>' : ''}`}
     </section>
 
     <section>

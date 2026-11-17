@@ -1,8 +1,9 @@
 import { renderCollectionRoute } from './collection.js';
 import { furniture } from './catalog.js';
-import { detailViews, parseRoute, routeFor, restoreState, swipeDestination } from './core.js';
+import { getParts, renderPartsOverview, renderPartDetail, renderAssemblyStep } from './parts.js?v=parts-1';
+import { detailViews, parseRoute, routeFor, restoreState, swipeDestination } from './core.js?v=life-timeline-1';
 import { icon } from './icons.js';
-import { renderPassport, renderInspection, renderBuyback } from './details.js';
+import { renderPassport, renderInspection, renderInspectionCapture, renderBuyback } from './details.js?v=inspection-1';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -18,16 +19,21 @@ let activeDeckItem = null;
 let scrollTimer;
 let toastTimer;
 let navigationTimer;
+let assemblyTimer;
+let assemblyIndex = 0;
 let programmatic = false;
 const photos = new Map();
+let captureDraft = null;
+let captureTarget = null;
+let pendingInitialCapture = null;
 const scanning = new Set();
 const scanTimers = new Map();
 const selected = () => furniture.find(item => item.id === (route.itemId || saved.selectedId)) || furniture[0];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 function persist() {
-  try { localStorage.setItem(STORAGE, JSON.stringify(saved)); }
-  catch { toast('儲存空間暫時無法使用，本次仍可繼續操作。'); }
+  try { localStorage.setItem(STORAGE, JSON.stringify(saved)); return true; }
+  catch { toast('儲存空間暫時無法使用，本次仍可繼續操作。'); return false; }
 }
 function toast(message) {
   clearTimeout(toastTimer);
@@ -77,7 +83,7 @@ function renderHome() {
   updateOffline();
 }
 function stateFor(item) {
-  return { inspectionStatus:scanning.has(item.id)?'scanning':saved.reports.includes(item.id)?'done':'idle', photoUrl: photos.get(item.id) || null, booking:saved.bookings[item.id] || null };
+  return { inspectionStatus:scanning.has(item.id)?'scanning':saved.reports.includes(item.id)?'done':'idle', photos: photos.get(item.id) || [], booking:saved.bookings[item.id] || null, memories:saved.memories[item.id] || [] };
 }
 function detailContent(view,item) {
   return ({passport:renderPassport,inspection:renderInspection,buyback:renderBuyback})[view](item,stateFor(item));
@@ -155,15 +161,44 @@ function renderRoute() {
     return;
   }
   route = parseRoute(location.hash, ids);
-  if (route.itemId) {saved.selectedId=route.itemId;persist();renderDetails();}
-  else renderHome();
+  if (route.itemId) {
+    saved.selectedId=route.itemId;persist();renderDetails();
+    if (pendingInitialCapture && pendingInitialCapture.item.id === route.itemId && route.view === 'inspection') {
+      const pending = pendingInitialCapture; pendingInitialCapture = null; beginCapture(pending.item, pending.url);
+    }
+  } else renderHome();
 }
 function showSheet(title,content) {
+  clearInterval(assemblyTimer); assemblyTimer = null;
   const sheet = $('#sheet');
   sheet.innerHTML = `<div class="sheet-handle"></div><div class="sheet-header"><h2 id="sheet-title">${title}</h2><button class="icon-button" data-action="close-sheet" aria-label="關閉">${icon('close',21)}</button></div><div class="sheet-content">${content}</div>`;
   if (!sheet.open) sheet.showModal();
 }
-function closeSheet() { $('#sheet').close(); }
+function closeSheet() { clearInterval(assemblyTimer); assemblyTimer = null; $('#sheet').close(); }
+function showPartsOverview() {
+  clearInterval(assemblyTimer); assemblyTimer = null; assemblyIndex = 0;
+  showSheet(`${escape(selected().name)} 的零件圖`, renderPartsOverview(selected()));
+  $('#sheet').scrollTop = 0;
+}
+function updateAssemblyFrame() {
+  const frame = $('#parts-film-frame');
+  if (frame) frame.innerHTML = renderAssemblyStep(selected(), assemblyIndex);
+}
+function moveAssembly(delta) {
+  const count = getParts(selected().id).length;
+  if (!count) return;
+  assemblyIndex = (assemblyIndex + delta + count) % count; updateAssemblyFrame();
+}
+function inspectionCaptureSheet() {
+  if (!captureDraft) return;
+  const item = furniture.find(entry => entry.id === captureDraft.itemId);
+  if (item) showSheet('拍攝家具照片', renderInspectionCapture(item, captureDraft.photos));
+}
+function beginCapture(item, initialPhoto = null) {
+  if (captureDraft) captureDraft.photos.filter(Boolean).forEach(url => URL.revokeObjectURL(url));
+  captureDraft = { itemId: item.id, photos: [initialPhoto, null, null] };
+  inspectionCaptureSheet();
+}
 function termsSheet() {
   showSheet('循環回購說明',`<p>讓仍然完好的家具，有機會繼續被使用。</p><ul class="sheet-list"><li>${icon('check-circle',20)}結構完整，主要零件齊全</li><li>${icon('check-circle',20)}表面清潔，無嚴重破損或受潮</li><li>${icon('store',20)}最終狀態與價格須由實際服務門市確認</li></ul><div class="demo-note">此頁保留原始設計的展示數據，並非 IKEA 官方服務。估價、認證與預約皆為示範，不會向門市送出申請。</div><button class="primary-button" data-action="close-sheet">了解</button>`);
 }
@@ -203,13 +238,37 @@ const actions={
   'sort':()=>{newest=!newest;$('#home-content').innerHTML=homeContent();},
   'favorite':()=>{const id=selected().id;const index=saved.favorites.indexOf(id);if(index<0)saved.favorites.push(id);else saved.favorites.splice(index,1);persist();const button=$('[data-action="favorite"]');button.setAttribute('aria-pressed',index<0);button.setAttribute('aria-label',index<0?'取消收藏':'收藏家具');toast(index<0?'已加入收藏。':'已取消收藏。');},
   'go-buyback':()=>navigate('buyback'),'go-inspection':()=>navigate('inspection'),'go-passport':()=>navigate('passport'),
-  'capture':()=>$('#photo-input').click(),
-  'inspect-start':()=>{
-    const item=selected();if(scanning.has(item.id))return;
-    scanning.add(item.id);refreshPage('inspection');
-    scanTimers.set(item.id,setTimeout(()=>{scanning.delete(item.id);scanTimers.delete(item.id);if(!saved.reports.includes(item.id))saved.reports.push(item.id);persist();if(selected().id===item.id){refreshPage('inspection');toast('展示檢測已完成，可查看狀態報告。');}},1800));
+  'add-memory':()=>{
+    const today = new Date();
+    const date = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
+    showSheet('新增生活紀錄', `<p>記下一個與 ${escape(selected().name)} 有關的時刻。</p><form id="memory-form"><label class="field">日期<input name="date" type="date" value="${date}" required></label><label class="field">生活記憶<textarea name="text" rows="4" maxlength="500" required placeholder="這一天發生了什麼？"></textarea></label><p class="muted memory-storage-note">紀錄儲存在這台裝置。</p><button class="primary-button" type="submit">儲存紀錄</button></form>`);
   },
-  'parts':()=>showSheet('零件與養護',`<p>${escape(selected().name)} 的日常照顧，從小地方開始。</p><ul class="sheet-list"><li>${icon('wrench',20)}定期確認接合處與固定零件</li><li>${icon('check-circle',20)}以微濕軟布清潔後擦乾</li><li>${icon('box',20)}查詢零件時，備妥型號與產品照片</li></ul><div class="demo-note">此頁為養護流程展示，未連接原廠零件庫，也不會送出訂單。</div><button class="primary-button" data-action="close-sheet">完成</button>`),
+  'capture':()=>{captureTarget = { itemId: selected().id, angle: null }; $('#photo-input').click();},
+  'inspect-start':()=>{const item=selected(); if(!scanning.has(item.id)) beginCapture(item);},
+  'capture-angle':button=>{
+    if (!captureDraft) return;
+    const angle = Number(button.dataset.angle);
+    if (!Number.isInteger(angle) || angle < 0 || angle > 2) return;
+    captureTarget = { itemId: captureDraft.itemId, angle };
+    $('#photo-input').click();
+  },
+  'inspect-analyze':()=>{
+    if (!captureDraft || captureDraft.photos.filter(Boolean).length !== 3) return;
+    const item = furniture.find(entry => entry.id === captureDraft.itemId);
+    if (!item || scanning.has(item.id)) return;
+    (photos.get(item.id) || []).forEach(url => URL.revokeObjectURL(url));
+    photos.set(item.id, captureDraft.photos);
+    captureDraft = null;
+    saved.reports = saved.reports.filter(id => id !== item.id);
+    scanning.add(item.id); closeSheet(); refreshPage('inspection');
+    scanTimers.set(item.id,setTimeout(()=>{scanning.delete(item.id);scanTimers.delete(item.id);if(!saved.reports.includes(item.id))saved.reports.push(item.id);persist();if(selected().id===item.id){refreshPage('inspection');toast('示範分析已完成，照片可在下方查看。');}},1800));
+  },
+  'parts':()=>showSheet('零件與養護',`<p>${escape(selected().name)} 的日常照顧，從小地方開始。</p><ul class="sheet-list"><li>${icon('wrench',20)}定期確認接合處與固定零件</li><li>${icon('check-circle',20)}以微濕軟布清潔後擦乾</li><li>${icon('box',20)}查詢零件時，備妥型號與產品照片</li></ul><div class="demo-note">此頁為養護流程展示，未連接原廠零件庫，也不會送出訂單。</div><button class="primary-button" data-action="parts-overview">下一步：查看零件圖 ${icon('arrow-right',18)}</button>`),
+  'parts-overview':()=>showPartsOverview(),
+  'part-detail':button=>{ clearInterval(assemblyTimer); assemblyTimer = null; const part = getParts(selected().id).find(entry=>entry.id===button.dataset.part); if (!part) return; showSheet('零件拆裝說明',renderPartDetail(selected(),part.id)); $('#sheet').scrollTop=0; },
+  'assembly-prev':()=>{clearInterval(assemblyTimer); assemblyTimer=null; moveAssembly(-1); const button=$('[data-action="assembly-play"]'); if(button) button.textContent='播放示意';},
+  'assembly-next':()=>{clearInterval(assemblyTimer); assemblyTimer=null; moveAssembly(1); const button=$('[data-action="assembly-play"]'); if(button) button.textContent='播放示意';},
+  'assembly-play':button=>{if(assemblyTimer){clearInterval(assemblyTimer);assemblyTimer=null;button.textContent='播放示意';return;} if(assemblyIndex===getParts(selected().id).length-1){assemblyIndex=0;updateAssemblyFrame();} button.textContent='暫停'; assemblyTimer=setInterval(()=>{if(assemblyIndex>=getParts(selected().id).length-1){clearInterval(assemblyTimer);assemblyTimer=null;button.textContent='重新播放';return;} moveAssembly(1);},2400);},
   'download':()=>download({furniture:selected(),inspection:saved.reports.includes(selected().id)?'demonstration-completed':'not-started',booking:saved.bookings[selected().id]||null,demo:true},`${selected().id}-passport.json`),
   'export-all':()=>download({furniture,state:saved,demo:true},'archive-collection.json'),
   'room':button=>{const room=button.dataset.room;showSheet(room,`<div class="furniture-grid" style="padding:8px 0 20px">${furniture.filter(item=>item.room===room).map(itemButton).join('')}</div>`);},
@@ -227,21 +286,48 @@ document.addEventListener('click',event=>{
   if(action && actions[action.dataset.action]) actions[action.dataset.action](action);
 });
 document.addEventListener('submit',event=>{
+  if(event.target.id==='memory-form') {
+    event.preventDefault();
+    const data = new FormData(event.target);
+    const text = String(data.get('text') || '').trim();
+    if (!text) { event.target.elements.text.setCustomValidity('請輸入生活記憶。'); event.target.elements.text.reportValidity(); return; }
+    const id = selected().id;
+    const previous = saved.memories[id];
+    saved.memories[id] = [...(previous || []), { date:String(data.get('date')), text }];
+    if (!persist()) { if (previous) saved.memories[id]=previous; else delete saved.memories[id]; return; }
+    refreshPage('passport'); closeSheet(); toast('生活紀錄已儲存。'); return;
+  }
   if(event.target.id!=='booking-form')return;
   event.preventDefault();const data=new FormData(event.target);const item=selected();
   const booking={method:data.get('method'),store:data.get('store'),date:data.get('date'),time:data.get('time'),code:`AR-${Date.now().toString(36).slice(-6).toUpperCase()}`};
   saved.bookings[item.id]=booking;persist();refreshPage('buyback');
   showSheet('已儲存示範預約',`<div class="booking-confirmation">${icon('check-circle',44)}<h3>下一段故事，準備出發。</h3><p>${escape(item.name)}<br>${escape(booking.date)} · ${escape(booking.time)}<br>${booking.method==='pickup'?'到府收件':escape(booking.store)}</p><strong>${booking.code}</strong><p class="demo-note">此為本機保存的示範預約，未向門市送出。</p><button class="primary-button" data-action="close-sheet">返回回購頁面</button></div>`);
 });
+document.addEventListener('input',event=>{if(event.target.matches('#memory-form textarea')) event.target.setCustomValidity('');});
 $('#photo-input').addEventListener('change',event=>{
-  const file=event.target.files?.[0];if(!file)return;
+  const file=event.target.files?.[0];
+  const target=captureTarget;
+  event.target.value=''; captureTarget=null;
+  if(!file || !target)return;
   if(!file.type.startsWith('image/')){toast('請選擇一張家具照片。');return;}
   if(file.size>25*1024*1024){toast('請選擇小於 25 MB 的照片。');return;}
-  const item=selected();if(photos.has(item.id))URL.revokeObjectURL(photos.get(item.id));
-  photos.set(item.id,URL.createObjectURL(file));saved.reports=saved.reports.filter(id=>id!==item.id);persist();
-  closeSheet();if(route.view==='inspection')refreshPage('inspection');else navigate('inspection',item.id);
-  toast('照片已選取，僅保留在這台裝置。');event.target.value='';
+  const item=furniture.find(entry=>entry.id===target.itemId);
+  if(!item)return;
+  const url=URL.createObjectURL(file);
+  if(target.angle === null){
+    closeSheet();
+    if(route.view !== 'inspection' || selected().id !== item.id){
+      pendingInitialCapture = { item, url };
+      navigate('inspection',item.id);
+    } else beginCapture(item,url);
+    return;
+  }
+  if(!captureDraft || captureDraft.itemId!==item.id){URL.revokeObjectURL(url);return;}
+  if(captureDraft.photos[target.angle])URL.revokeObjectURL(captureDraft.photos[target.angle]);
+  captureDraft.photos[target.angle]=url;
+  inspectionCaptureSheet();
 });
+$('#sheet').addEventListener('close',()=>{clearInterval(assemblyTimer);assemblyTimer=null;});
 $('#sheet').addEventListener('click',event=>{if(event.target===$('#sheet')){const r=$('#sheet').getBoundingClientRect();if(event.clientY<r.top || event.clientX<r.left || event.clientX>r.right)closeSheet();}});
 window.addEventListener('hashchange',renderRoute);
 window.addEventListener('resize',()=>{if(route.view!=='home'&&$('.detail-deck')){$('.detail-deck').scrollLeft=detailViews.indexOf(route.view)*$('.detail-deck').clientWidth;}});

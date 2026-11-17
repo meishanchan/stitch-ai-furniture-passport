@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fbf9f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Archive">
+  <meta name="description" content="每件家具，都值得下一段故事。瀏覽你的家具典藏、數位履歷、狀態檢測與循環回購。">
+  <title>Archive — 傢居數位履歷</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="./icons/archive.svg">
+  <link rel="stylesheet" href="./styles.css?v=parts-1">
+  <link rel="stylesheet" href="./details.css?v=inspection-1">
+  <link rel="stylesheet" href="./collection.css">
+  <script type="module" src="./app.js?v=parts-1"></script>
+</head>
+<body>
+  <div id="app" class="app-frame" aria-label="Archive 傢居數位履歷">
+    <div class="boot-state"><span>Archive</span><p>正在打開你的典藏…</p></div>
+  </div>
+  <dialog id="sheet" class="sheet" aria-labelledby="sheet-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="photo-input" type="file" accept="image/*" hidden>
+  <noscript>請在 Safari 啟用 JavaScript 以操作家具履歷。</noscript>
+</body>
+</html>

@@ -12,10 +12,10 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="./icons/archive.svg">
-  <link rel="stylesheet" href="./styles.css">
-  <link rel="stylesheet" href="./details.css">
+  <link rel="stylesheet" href="./styles.css?v=parts-1">
+  <link rel="stylesheet" href="./details.css?v=inspection-1">
   <link rel="stylesheet" href="./collection.css">
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=parts-1"></script>
 </head>
 <body>
   <div id="app" class="app-frame" aria-label="Archive 傢居數位履歷">
@@ -23,7 +23,7 @@
   </div>
   <dialog id="sheet" class="sheet" aria-labelledby="sheet-title"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <input id="photo-input" type="file" accept="image/*" capture="environment" hidden>
+  <input id="photo-input" type="file" accept="image/*" hidden>
   <noscript>請在 Safari 啟用 JavaScript 以操作家具履歷。</noscript>
 </body>
 </html>
