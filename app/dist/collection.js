@@ -1,63 +1,717 @@
-import { collection } from './collection-data.js';
-import { filterCollection, addToBag, changeQuantity, bagTotals, restoreBag } from './collection-core.js';
+import { collection, events } from './collection-data.js';
+import {
+  filterCollection,
+  addToBag,
+  changeQuantity,
+  bagTotals,
+  restoreBag,
+  filterEvents,
+  getEventsForDate,
+  getUpcomingEvents,
+  getMonthCalendarCells,
+  restoreRsvps,
+} from './collection-core.js';
 import { icon } from './icons.js';
 
-const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money=value=>`NT$${value.toLocaleString('zh-TW')}`;
-const product=id=>collection.find(item=>item.id===id);
-const STORE='archive-collection-bag-v1';
-let raw;try{raw=localStorage.getItem(STORE);}catch{}
-let bag=restoreBag(raw,collection);
-let filters={query:'',category:'全部',grade:'全部',growth:false,sort:'curated'};
-let currentId=null,tab='recipe',finish='',listScroll=0,host;
-let checkoutStep='bag',order=null;
-const customer={name:'',phone:'',postal:'',address:''};
-const go=id=>{location.hash=id?`#/collection/item/${encodeURIComponent(id)}`:'#/collection';};
-const totals=()=>bagTotals(bag,collection);
-function persist(){try{localStorage.setItem(STORE,JSON.stringify(bag));}catch{host.toast('購物袋暫時無法儲存，仍可繼續本次操作。');}updateBagBadge();}
-function updateBagBadge(){document.querySelectorAll('[data-shop-count]').forEach(node=>{node.textContent=totals().count;node.hidden=totals().count===0;});}
-function bagButton(){return `<button class="icon-button shop-bag-button" data-shop="bag" aria-label="開啟館藏購物袋">${icon('shopping-bag',22)}<span class="shop-bag-count" data-shop-count ${totals().count?'':'hidden'}>${totals().count}</span></button>`;}
-function header(detail=false){return `<header class="app-header shop-header"><button class="icon-button" ${detail?'data-shop="back"':'data-view="home"'} aria-label="${detail?'返回館藏':'返回我的家具'}">${icon('arrow-left',21)}</button><h1 class="app-title">${detail?'館藏':'Archive'}</h1>${bagButton()}</header>`;}
-function searchTools(){return `<div class="shop-tools"><label class="shop-search">${icon('search',18)}<input type="search" data-shop-filter="query" aria-label="搜尋館藏家具" placeholder="搜尋桌、椅、櫃、原件或編號…" value="${esc(filters.query)}"></label><details class="shop-filter-details"><summary>篩選與排序<span>分類、品相、人生階段</span></summary><div class="shop-categories" aria-label="家具分類">${['全部','桌類','椅類','櫃類'].map(value=>`<button data-shop="category" data-value="${value}" aria-pressed="${filters.category===value}">${value==='全部'?'全部品項':value}</button>`).join('')}</div><div class="shop-refinements"><label>品相分級<select data-shop-filter="grade" aria-label="品相分級">${['全部','A 級珍藏','B 級溫潤歲月'].map(value=>`<option value="${value}" ${value===filters.grade?'selected':''}>${value==='全部'?'不限分級':value}</option>`).join('')}</select></label><label>排序方式<select data-shop-filter="sort" aria-label="排序方式"><option value="curated" ${filters.sort==='curated'?'selected':''}>策展推薦</option><option value="price-asc" ${filters.sort==='price-asc'?'selected':''}>價格：由低到高</option><option value="carbon-desc" ${filters.sort==='carbon-desc'?'selected':''}>減碳量：由高到低</option></select></label></div><label class="shop-growth"><input type="checkbox" data-shop-filter="growth" ${filters.growth?'checked':''}>跟著人生階段走</label></details></div>`;}
-function itemMarkup(item,index){return `<article class="shop-item"><button class="shop-image" data-shop="product" data-id="${item.id}" aria-label="查看 ${esc(item.name)} 詳情"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="800" height="600" ${index===0?'fetchpriority="high"':'loading="lazy"'}></button><div class="shop-item-meta"><span>${item.grade} · ${item.eraYear} 年 · ${item.category}</span><span>${item.provenanceId}</span></div><button class="shop-item-title" data-shop="product" data-id="${item.id}"><h3>${esc(item.name)}</h3></button><p class="shop-recipe">零件配方：${esc(item.sourcePieces.join(' ＋ '))}</p><p class="shop-journey">人生階段：${esc(item.lifeStageJourney)}</p><p class="shop-description">${esc(item.demandResponse)} ${esc(item.innovationConcept)}</p><p class="shop-dimensions">${esc(item.dimensions)}</p><div class="shop-item-footer"><div class="shop-price"><strong>${money(item.price)}</strong> <s>${money(item.originalRetailPrice)}</s><small>減少 ${item.carbonSavedKg} kg CO₂e</small></div><div class="shop-item-actions"><button class="shop-text-button" data-shop="product" data-id="${item.id}">詳情 ${icon('arrow-right',15)}</button><button class="shop-add" data-shop="quick-add" data-id="${item.id}" aria-label="將 ${esc(item.name)} 加入購物袋">加入購物袋</button></div></div></article>`;}
-function updateResults(){const list=filterCollection(collection,filters);document.querySelector('#shop-count').textContent=`顯示 ${list.length} / ${collection.length} 件現貨`;document.querySelector('#shop-results').innerHTML=list.length?list.map(itemMarkup).join(''):`<div class="shop-empty">${icon('search',30)}<h3>找不到符合篩選條件的家具作品。</h3><p>請試著清除搜尋關鍵字，或切換回「不限分級」以瀏覽所有修復完成的作品。</p><button class="secondary-button" data-shop="reset">重設所有篩選條件</button></div>`;document.querySelectorAll('[data-shop="category"]').forEach(button=>button.setAttribute('aria-pressed',button.dataset.value===filters.category));}
-function renderList(){currentId=null;const root=document.querySelector('#app');root.innerHTML=`${header()}<main class="home-view shop-view" id="shop-scroll"><section class="shop-intro"><h2>Re-KEA再生系列家具館藏</h2><p>每件作品皆於各地工坊進行修繕，延續它的故事</p></section>${searchTools()}<div class="shop-result-meta"><span id="shop-count" aria-live="polite"></span><span>附完整工坊修復認證</span></div><section class="shop-results" id="shop-results" aria-label="再生家具列表"></section><p class="archive-caption">每件家具，都值得下一段故事。<br>館藏與訂單流程為互動示範</p></main>${host.nav()}`;updateResults();document.querySelector('#shop-scroll').scrollTop=listScroll;document.title='館藏 — Archive';}
-const textBlock=(heading,text)=>`<section class="shop-info-block"><h3>${heading}</h3><p>${esc(text)}</p></section>`;
-function detailPanel(item){if(tab==='recipe')return `<div class="shop-source-pieces">${item.sourcePieces.map((source,index)=>`<div><span>拆解來源系列 ${index===0?'A':'B'}</span><p>${esc(source)}</p></div>`).join('')}</div><section class="shop-info-block"><h3>設計師驗證零件配方</h3><ul>${item.partsRecipe.map(part=>`<li>${esc(part)}</li>`).join('')}</ul></section>${textBlock('孔位與尺寸相容性驗證',item.compatibilityNote)}${textBlock('工坊重組工序摘要',item.restorationSummary)}`;
-if(tab==='lifecycle')return `${textBlock('跟著人生階段走',item.lifeStageJourney)}${textBlock('回應的真實生活需求',item.demandResponse)}<section class="shop-info-block"><h3>歷程溯源紀錄</h3><ol class="shop-timeline">${item.timeline.map(step=>`<li><span>${step.year}</span><div><p>${esc(step.event)}</p><small>${esc(step.location)}${step.artisan?` · 設計師／職人：${esc(step.artisan)}`:''}</small></div></li>`).join('')}</ol></section>`;
-return `<section class="shop-info-block"><h3>材料可循環指數</h3><p class="shop-metric-value">${item.circularityIndex}%</p><meter min="0" max="100" value="${item.circularityIndex}" aria-label="材料可循環指數">${item.circularityIndex}%</meter><p>冷軋鋼材、蜂巢板、壓克力漆纖維板、強化玻璃與再生聚丙烯皆可模組拆解再利用。</p></section><section class="shop-info-block"><h3>隱含碳排封存量</h3><p class="shop-metric-value">${item.carbonSavedKg} <small>kg CO₂e</small></p><p>預計再延續 +${item.lifespanAddedYears} 年安心使用壽命。</p></section>`;}
-function renderProduct(item){if(currentId!==item.id){tab='recipe';finish=item.finishOptions[0];}currentId=item.id;document.querySelector('#app').innerHTML=`${header(true)}<main class="home-view shop-view shop-detail"><div class="shop-detail-image"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="800" height="600"></div><div class="shop-detail-body"><p class="shop-detail-meta">${esc(item.designer)} · ${item.grade} · ${item.eraYear} 年製</p><h2>${esc(item.name)}</h2><p class="shop-grade-note">${esc(item.gradeNote)}</p><div class="shop-detail-price"><strong>${money(item.price)}</strong><s>新品原價 ${money(item.originalRetailPrice)}</s></div><p class="shop-availability">${icon('check',14)} 孤品現貨 1 件 <span>護照 ${item.provenanceId}</span></p><div class="shop-specs"><dl><dt>材質結構</dt><dd>${esc(item.material)}</dd><dt>實際尺寸</dt><dd>${esc(item.dimensions)}</dd><dt>再生工坊</dt><dd>${esc(item.workshop)}</dd></dl></div><fieldset class="shop-finishes"><legend>選擇成品外觀與保護塗層</legend>${item.finishOptions.map(option=>`<label><input type="radio" name="shop-finish" value="${esc(option)}" ${finish===option?'checked':''}><span>${esc(option)}</span></label>`).join('')}</fieldset><div class="shop-detail-tabs" role="tablist" aria-label="家具配方與履歷分頁">${[['recipe','零件配方驗證'],['lifecycle','人生階段履歷'],['metrics','循環減碳指標']].map(([id,label])=>`<button role="tab" id="shop-tab-${id}" data-shop="tab" data-value="${id}" aria-controls="shop-panel" aria-selected="${tab===id}" tabindex="${tab===id?0:-1}">${label}</button>`).join('')}</div><div class="shop-panel" id="shop-panel" role="tabpanel" aria-labelledby="shop-tab-${tab}">${detailPanel(item)}</div></div></main><div class="shop-purchase-bar"><span>減少 ${item.carbonSavedKg} kg CO₂e<strong>${money(item.price)}</strong></span><button class="primary-button" data-shop="add">加入購物袋</button></div>${host.nav()}`;document.title=`${item.name} · 館藏 — Archive`;}
-function summary(){const sum=totals();return `<dl class="shop-summary"><div><dt>家具小計</dt><dd>${money(sum.subtotal)}</dd></div><div><dt>專車包覆定位運費</dt><dd>${sum.delivery?money(sum.delivery):'免運費'}</dd></div><div class="shop-total"><dt>應付總金額</dt><dd>${money(sum.total)}</dd></div></dl>`;}
-function bagLine(entry,index){const item=product(entry.id);return `<article class="shop-bag-line"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="80" height="80"><div><h3>${esc(item.name)}</h3><p>${esc(entry.finish)}</p><div class="shop-bag-line-controls"><div class="shop-quantity"><button data-shop="quantity" data-index="${index}" data-delta="-1" aria-label="減少 ${esc(item.name)} 數量">${icon('minus',15)}</button><span>${entry.quantity}</span><button data-shop="quantity" data-index="${index}" data-delta="1" aria-label="增加 ${esc(item.name)} 數量">${icon('plus',15)}</button></div><strong>${money(item.price*entry.quantity)}</strong></div><button class="shop-remove" data-shop="remove" data-index="${index}">移除</button></div></article>`;}
-function showBag(){
-  if(checkoutStep==='confirmed'&&order){host.showSheet('已確認家具保留訂單',`<div class="shop-order-confirmation">${icon('check-circle',42)}<p class="shop-order-number">訂單編號 #${order.number}</p><h3>正在為您安排專車定位配送</h3><p>感謝您，${esc(order.customer.name)}。工坊團隊將於 24 小時內致電與您確認送達 ${esc(order.customer.postal)} ${esc(order.customer.address)} 的最適合時段，並提供進屋定位與養護說明。</p><p class="demo-note">此為互動示範，未送出真實訂單或安排配送。</p><button class="primary-button" data-shop="continue">繼續瀏覽館藏</button></div>`);return;}
-  if(!bag.length){checkoutStep='bag';host.showSheet('您的循環購物袋',`<div class="shop-empty">${icon('shopping-bag',35)}<h3>您的購物袋目前沒有家具。</h3><p>可於精選館藏保留修復完成的再生作品。</p><button class="primary-button" data-shop="continue">繼續瀏覽館藏</button></div>`);return;}
-  const sum=totals();
-  if(checkoutStep==='bag'){host.showSheet('您的循環購物袋',`<p class="shop-bag-meta">共 ${sum.count} 件 · 減少 ${sum.carbon.toFixed(1)} kg CO₂e</p>${bag.map(bagLine).join('')}${summary()}<button class="primary-button" data-shop="checkout">填寫台灣配送與聯絡資料 ${icon('arrow-right',18)}</button>`);}
-  else{host.showSheet('配送與聯絡資料',`<p class="shop-checkout-copy">單筆滿 NT$15,000 即享台灣本島都會區專車免費配送到府。支援貨到驗收確認後付款或線上轉帳。</p><form id="shop-checkout-form">${[['name','收件人姓名','text','林佳穎','name'],['phone','聯絡手機號碼','tel','0912-345-678','tel'],['postal','郵遞區號與縣市區域','text','106 台北市大安區','postal-code'],['address','詳細配送地址（含樓層或電梯說明）','text','仁愛路四段 112 巷 8 號 3 樓（有電梯）','street-address']].map(([name,label,type,placeholder,autocomplete])=>`<label class="field">${label}<input required name="${name}" type="${type}" autocomplete="${autocomplete}" placeholder="${placeholder}" value="${esc(customer[name])}" data-shop-customer="${name}"></label>`).join('')}${summary()}<p class="shop-checkout-note">訂單流程為互動示範，資料不會送出。</p><div class="shop-checkout-actions"><button class="secondary-button" type="button" data-shop="back-bag">返回</button><button class="primary-button" type="submit">確認保留家具訂單</button></div></form>`);}
+const esc = value =>
+  String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = value => `NT$${value.toLocaleString('zh-TW')}`;
+const product = id => collection.find(item => item.id === id);
+const getEvent = id => events.find(item => item.id === id);
+
+const STORE = 'archive-collection-bag-v1';
+const RSVP_STORE = 'archive-events-rsvp-v1';
+let raw;
+try {
+  raw = localStorage.getItem(STORE);
+} catch {}
+let bag = restoreBag(raw, collection);
+let rsvps = {};
+try {
+  rsvps = restoreRsvps(localStorage.getItem(RSVP_STORE));
+} catch {}
+
+let filters = { query: '', category: '全部', grade: '全部', growth: false, sort: 'curated' };
+let subView = 'furniture'; // 'furniture' | 'calendar'
+let calYear = 2026;
+let calMonth = 10; // 0-indexed: 10 is November
+let selectedDate = '2026-11-21';
+let eventFilter = 'all'; // 'all' | 'market' | 'diy'
+let currentId = null,
+  tab = 'recipe',
+  finish = '',
+  listScroll = 0,
+  host;
+let checkoutStep = 'bag',
+  order = null;
+const customer = { name: '', phone: '', postal: '', address: '' };
+
+const go = id => {
+  location.hash = id
+    ? `#/collection/item/${encodeURIComponent(id)}`
+    : subView === 'calendar'
+      ? '#/collection/calendar'
+      : '#/collection';
+};
+const totals = () => bagTotals(bag, collection);
+
+function persist() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify(bag));
+  } catch {
+    host.toast('購物袋暫時無法儲存，仍可繼續本次操作。');
+  }
+  updateBagBadge();
 }
-export function renderCollectionRoute(options){host=options;const match=/^#\/collection(?:\/item\/([^/]+))?\/?$/.exec(location.hash);if(!match)return false;
-  if(match[1]){let item;try{item=product(decodeURIComponent(match[1]));}catch{}if(item)renderProduct(item);else{history.replaceState(null,'','#/collection');renderList();}}
-  else renderList();return true;
+
+function updateBagBadge() {
+  document.querySelectorAll('[data-shop-count]').forEach(node => {
+    node.textContent = totals().count;
+    node.hidden = totals().count === 0;
+  });
 }
-function setTab(next){tab=next;document.querySelectorAll('[data-shop="tab"]').forEach(button=>{button.setAttribute('aria-selected',button.dataset.value===tab);button.tabIndex=button.dataset.value===tab?0:-1;});const panel=document.querySelector('#shop-panel');panel.innerHTML=detailPanel(product(currentId));panel.setAttribute('aria-labelledby',`shop-tab-${tab}`);}
-document.addEventListener('click',event=>{
-  const button=event.target.closest('[data-shop]');if(!button||!host)return;
-  const {shop,id,value,index,delta}=button.dataset;
-  if(shop==='product'){listScroll=document.querySelector('#shop-scroll')?.scrollTop||0;go(id);}
-  if(shop==='back')go();
-  if(shop==='category'){filters.category=value;updateResults();}
-  if(shop==='reset'){filters={query:'',category:'全部',grade:'全部',growth:false,sort:'curated'};listScroll=0;renderList();document.querySelector('[data-shop-filter="query"]').focus();}
-  if(shop==='tab')setTab(value);
-  if(shop==='bag'){checkoutStep='bag';showBag();}
-  if(shop==='add'||shop==='quick-add'){const item=product(id||currentId);bag=addToBag(bag,item,id?item.finishOptions[0]:finish);persist();checkoutStep='bag';showBag();}
-  if(shop==='quantity'){bag=changeQuantity(bag,Number(index),Number(delta));persist();showBag();}
-  if(shop==='remove'){bag=bag.filter((_,i)=>i!==Number(index));persist();showBag();}
-  if(shop==='checkout'){checkoutStep='details';showBag();}
-  if(shop==='back-bag'){checkoutStep='bag';showBag();}
-  if(shop==='continue'){checkoutStep='bag';host.closeSheet();go();}
+
+function bagButton() {
+  return `<button class="icon-button shop-bag-button" data-shop="bag" aria-label="開啟館藏購物袋">${icon('shopping-bag', 22)}<span class="shop-bag-count" data-shop-count ${totals().count ? '' : 'hidden'}>${totals().count}</span></button>`;
+}
+
+function header(detail = false) {
+  const isCal = subView === 'calendar' && !detail;
+  const backAction = detail ? 'data-shop="back"' : isCal ? 'data-shop="back-to-furniture"' : 'data-view="home"';
+  const backLabel = detail ? '返回館藏' : isCal ? '返回策展家具' : '返回我的家具';
+  const title = detail ? '館藏' : isCal ? '循環活動日曆' : 'Archive';
+  return `<header class="app-header shop-header"><button class="icon-button" ${backAction} aria-label="${backLabel}">${icon('arrow-left', 21)}</button><h1 class="app-title">${title}</h1>${bagButton()}</header>`;
+}
+
+function shopTabsNav() {
+  return `<div class="shop-tabs-nav" role="tablist" aria-label="館藏分頁切換">
+    <button class="shop-tab-pill ${subView === 'furniture' ? 'active' : ''}" data-shop-view="furniture" role="tab" aria-selected="${subView === 'furniture'}">
+      ${icon('box', 16)} 策展家具 (${collection.length})
+    </button>
+    <button class="shop-tab-pill ${subView === 'calendar' ? 'active' : ''}" data-shop-view="calendar" role="tab" aria-selected="${subView === 'calendar'}">
+      ${icon('calendar', 16)} 循環活動日曆
+      <span class="shop-tab-badge">${events.length}場</span>
+    </button>
+  </div>`;
+}
+
+function shopEventBanner() {
+  return `<div class="shop-event-strip" data-shop-view="calendar" role="button" tabindex="0" aria-label="查看 11–12 月循環活動日曆">
+    <div class="shop-event-strip-icon">${icon('calendar', 22)}</div>
+    <div class="shop-event-strip-info">
+      <strong>11–12 月 Re-KEA 循環活動日曆已上線</strong>
+      <p>週末二手市集 · 老椅凳編織 DIY · 五金零件免費交換所</p>
+    </div>
+    <span class="shop-event-strip-action">查看日曆 ${icon('arrow-right', 14)}</span>
+  </div>`;
+}
+
+function searchTools() {
+  return `<div class="shop-tools"><label class="shop-search">${icon('search', 18)}<input type="search" data-shop-filter="query" aria-label="搜尋館藏家具" placeholder="搜尋桌、椅、櫃、原件或編號…" value="${esc(filters.query)}"></label><details class="shop-filter-details"><summary>篩選與排序<span>分類、品相、人生階段</span></summary><div class="shop-categories" aria-label="家具分類">${['全部', '桌類', '椅類', '櫃類'].map(value => `<button data-shop="category" data-value="${value}" aria-pressed="${filters.category === value}">${value === '全部' ? '全部品項' : value}</button>`).join('')}</div><div class="shop-refinements"><label>品相分級<select data-shop-filter="grade" aria-label="品相分級">${['全部', 'A 級珍藏', 'B 級溫潤歲月'].map(value => `<option value="${value}" ${value === filters.grade ? 'selected' : ''}>${value === '全部' ? '不限分級' : value}</option>`).join('')}</select></label><label>排序方式<select data-shop-filter="sort" aria-label="排序方式"><option value="curated" ${filters.sort === 'curated' ? 'selected' : ''}>策展推薦</option><option value="price-asc" ${filters.sort === 'price-asc' ? 'selected' : ''}>價格：由低到高</option><option value="carbon-desc" ${filters.sort === 'carbon-desc' ? 'selected' : ''}>減碳量：由高到低</option></select></label></div><label class="shop-growth"><input type="checkbox" data-shop-filter="growth" ${filters.growth ? 'checked' : ''}>跟著人生階段走</label></details></div>`;
+}
+
+function itemMarkup(item, index) {
+  return `<article class="shop-item"><button class="shop-image" data-shop="product" data-id="${item.id}" aria-label="查看 ${esc(item.name)} 詳情"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="800" height="600" ${index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'}></button><div class="shop-item-meta"><span>${item.grade} · ${item.eraYear} 年 · ${item.category}</span><span>${item.provenanceId}</span></div><button class="shop-item-title" data-shop="product" data-id="${item.id}"><h3>${esc(item.name)}</h3></button><p class="shop-recipe">零件配方：${esc(item.sourcePieces.join(' ＋ '))}</p><p class="shop-journey">人生階段：${esc(item.lifeStageJourney)}</p><p class="shop-description">${esc(item.demandResponse)} ${esc(item.innovationConcept)}</p><p class="shop-dimensions">${esc(item.dimensions)}</p><div class="shop-item-footer"><div class="shop-price"><strong>${money(item.price)}</strong> <s>${money(item.originalRetailPrice)}</s><small>減少 ${item.carbonSavedKg} kg CO₂e</small></div><div class="shop-item-actions"><button class="shop-text-button" data-shop="product" data-id="${item.id}">詳情 ${icon('arrow-right', 15)}</button><button class="shop-add" data-shop="quick-add" data-id="${item.id}" aria-label="將 ${esc(item.name)} 加入購物袋">加入購物袋</button></div></div></article>`;
+}
+
+function updateResults() {
+  const list = filterCollection(collection, filters);
+  const countNode = document.querySelector('#shop-count');
+  if (countNode) countNode.textContent = `顯示 ${list.length} / ${collection.length} 件現貨`;
+  const resultsNode = document.querySelector('#shop-results');
+  if (resultsNode) {
+    resultsNode.innerHTML = list.length
+      ? list.map(itemMarkup).join('')
+      : `<div class="shop-empty">${icon('search', 30)}<h3>找不到符合篩選條件的家具作品。</h3><p>請試著清除搜尋關鍵字，或切換回「不限分級」以瀏覽所有修復完成的作品。</p><button class="secondary-button" data-shop="reset">重設所有篩選條件</button></div>`;
+  }
+  document.querySelectorAll('[data-shop="category"]').forEach(button => button.setAttribute('aria-pressed', button.dataset.value === filters.category));
+}
+
+// Calendar View Logic & Rendering
+function formatSelectedDayTitle(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+  return `${m} 月 ${d} 日（${weekdays[dateObj.getDay()]}）`;
+}
+
+function renderCalendarGrid() {
+  const cells = getMonthCalendarCells(calYear, calMonth);
+  const todayStr = '2026-11-17';
+  return cells
+    .map(cell => {
+      const cellEvents = getEventsForDate(events, cell.dateStr);
+      const isSelected = cell.dateStr === selectedDate;
+      const isToday = cell.dateStr === todayStr;
+
+      let dotsHtml = '';
+      if (cell.isCurrentMonth && cellEvents.length > 0) {
+        const hasMarket = cellEvents.some(e => e.type === 'market');
+        const hasDiy = cellEvents.some(e => e.type === 'diy');
+        const dots = [];
+        if (hasMarket) dots.push('<span class="calendar-dot dot-market"></span>');
+        if (hasDiy) dots.push('<span class="calendar-dot dot-diy"></span>');
+        dotsHtml = dots.join('');
+      }
+
+      return `<button class="calendar-day-cell ${cell.isCurrentMonth ? '' : 'other-month'} ${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}" data-calendar-date="${cell.dateStr}" ${cell.isCurrentMonth ? '' : 'disabled'} aria-label="${cell.dateStr}${cellEvents.length ? `，有 ${cellEvents.length} 場活動` : ''}">
+        <span class="calendar-day-number">${cell.day}</span>
+        <div class="calendar-day-dots">${dotsHtml}</div>
+      </button>`;
+    })
+    .join('');
+}
+
+function renderEventCard(evt) {
+  const isBooked = !!rsvps[evt.id];
+  return `<article class="calendar-event-card" data-calendar-event="${evt.id}" role="button" tabindex="0" aria-label="查看 ${esc(evt.title)} 詳情">
+    <div class="event-card-top">
+      <span class="event-badge ${evt.badgeClass}">${evt.typeLabel}</span>
+      <span class="event-time">${evt.date} (${evt.weekday}) ${evt.time}</span>
+      ${isBooked ? `<span class="event-rsvp-tag">${icon('check', 12)} 已預約</span>` : ''}
+    </div>
+    <h3 class="event-card-title">${esc(evt.title)}</h3>
+    <div class="event-card-meta">
+      <span>${icon('store', 13)} ${esc(evt.location)}</span>
+    </div>
+    <p class="event-card-summary">${esc(evt.summary)}</p>
+    <div class="event-card-footer">
+      <div class="event-card-stats">
+        <span class="event-fee">${esc(evt.fee.split('（')[0])}</span>
+        <span class="event-carbon">🌿 減碳 ${evt.carbonSavedKg} kg</span>
+      </div>
+      <span class="event-card-action">查看詳情 ${icon('arrow-right', 13)}</span>
+    </div>
+  </article>`;
+}
+
+function renderEmptyDay(dateStr) {
+  return `<div class="calendar-empty-day">
+    <p>${formatSelectedDayTitle(dateStr)} 暫無大型排程活動</p>
+    <small>工坊常設零件庫、現場評估與自助維護工作檯照常開放（11:00 – 20:00），歡迎蒞臨尋寶。</small>
+  </div>`;
+}
+
+function renderCalendarView() {
+  const dayEvents = getEventsForDate(events, selectedDate).filter(e => eventFilter === 'all' || e.type === eventFilter);
+  const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+  const monthEvents = filterEvents(events, { category: eventFilter, month: monthStr });
+  const upcomingEvents = getUpcomingEvents(
+    events.filter(e => eventFilter === 'all' || e.type === eventFilter),
+    selectedDate,
+    4
+  );
+
+  return `<section class="calendar-wrapper">
+    <div class="calendar-header-bar">
+      <div class="calendar-month-selector">
+        <button class="icon-button calendar-nav-btn" data-calendar-action="prev-month" aria-label="上一個月">${icon('arrow-left', 18)}</button>
+        <h3 class="calendar-month-title">${calYear} 年 ${calMonth + 1} 月</h3>
+        <button class="icon-button calendar-nav-btn" data-calendar-action="next-month" aria-label="下一個月">${icon('arrow-right', 18)}</button>
+      </div>
+      <button class="calendar-today-pill" data-calendar-action="today">回到今天</button>
+    </div>
+
+    <div class="calendar-filter-bar" role="tablist" aria-label="活動類型篩選">
+      <button class="calendar-filter-chip ${eventFilter === 'all' ? 'active' : ''}" data-calendar-filter="all">全部活動 (${events.length})</button>
+      <button class="calendar-filter-chip ${eventFilter === 'market' ? 'active' : ''}" data-calendar-filter="market">♻️ 循環市集 (${events.filter(e => e.type === 'market').length})</button>
+      <button class="calendar-filter-chip ${eventFilter === 'diy' ? 'active' : ''}" data-calendar-filter="diy">🔨 手作 DIY (${events.filter(e => e.type === 'diy').length})</button>
+    </div>
+
+    <div class="calendar-month-card">
+      <div class="calendar-weekdays" aria-hidden="true">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="calendar-grid" role="grid" aria-label="${calYear} 年 ${calMonth + 1} 月日曆">
+        ${renderCalendarGrid()}
+      </div>
+    </div>
+
+    <div class="calendar-day-section">
+      <div class="calendar-day-header">
+        <h4>${formatSelectedDayTitle(selectedDate)}</h4>
+        <span class="calendar-day-count">${dayEvents.length ? `${dayEvents.length} 場活動` : '日常工坊開放'}</span>
+      </div>
+      <div class="calendar-day-events">
+        ${dayEvents.length ? dayEvents.map(renderEventCard).join('') : renderEmptyDay(selectedDate)}
+      </div>
+    </div>
+
+    <div class="calendar-feed-section">
+      <div class="calendar-feed-header">
+        <h4>近期循環活動推薦</h4>
+        <span>本月共 ${monthEvents.length} 場</span>
+      </div>
+      <div class="calendar-feed-list">
+        ${upcomingEvents.length ? upcomingEvents.map(renderEventCard).join('') : `<p class="muted" style="text-align:center;padding:20px 0">此分類暫無其他近期活動</p>`}
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderRsvpSection(evt) {
+  const rsvp = rsvps[evt.id];
+  if (rsvp) {
+    return `<div class="rsvp-confirmed-card">
+      <div class="rsvp-confirmed-header">
+        ${icon('check-circle', 28)}
+        <div>
+          <h4>席位已保留</h4>
+          <p class="rsvp-code">預約憑證 #${esc(rsvp.code)}</p>
+        </div>
+      </div>
+      <dl class="rsvp-meta-dl">
+        <div><dt>預約人</dt><dd>${esc(rsvp.name)}（${rsvp.guests} 位）</dd></div>
+        <div><dt>聯絡電話</dt><dd>${esc(rsvp.phone)}</dd></div>
+        <div><dt>登記時間</dt><dd>${esc(rsvp.bookedAt)}</dd></div>
+      </dl>
+      <p class="demo-note">入場時請向現場接待人員出示此憑證。此紀錄已妥善儲存於本機。</p>
+      <button class="secondary-button rsvp-cancel-btn" data-calendar-cancel="${evt.id}">取消此預約席位</button>
+    </div>`;
+  }
+  return `<form class="rsvp-form" id="calendar-rsvp-form" data-event-id="${evt.id}">
+    <h4>線上預約保留席位</h4>
+    <p class="form-sub">名額有限，送出後即刻為您保留專屬活動席位與材料。</p>
+    <label class="field">預約人姓名
+      <input required name="name" placeholder="如：林佳穎" value="${esc(customer.name || '')}">
+    </label>
+    <label class="field">聯絡手機號碼
+      <input required name="phone" type="tel" placeholder="如：0912-345-678" value="${esc(customer.phone || '')}">
+    </label>
+    <label class="field">預約席位人數
+      <select name="guests">
+        <option value="1">1 位參加</option>
+        <option value="2">2 位同行</option>
+        <option value="3">3 位同行</option>
+        <option value="4">4 位（上限）</option>
+      </select>
+    </label>
+    <p class="demo-note">此為互動示範預約，資料將儲存於您的瀏覽器，無須預付費用。</p>
+    <button type="submit" class="primary-button">確認預約活動席位 ${icon('arrow-right', 16)}</button>
+  </form>`;
+}
+
+function renderEventDetailSheet(evt) {
+  return `<div class="event-detail-sheet">
+    <div class="event-detail-header">
+      <div class="event-detail-badges">
+        <span class="event-badge ${evt.badgeClass}">${evt.typeLabel}</span>
+        <span class="event-tag-pill">${esc(evt.tag)}</span>
+      </div>
+      <h2 class="event-detail-title">${esc(evt.title)}</h2>
+      <p class="event-detail-time">📅 ${evt.date} (${evt.weekday}) ${evt.time}</p>
+      <p class="event-detail-location">📍 ${esc(evt.location)}<br><small class="event-detail-address">${esc(evt.address)}</small></p>
+    </div>
+
+    <div class="event-stat-grid">
+      <div><span>活動費用</span><strong>${esc(evt.fee)}</strong></div>
+      <div><span>名額狀態</span><strong>${esc(evt.capacity)}</strong></div>
+      <div><span>主辦單位</span><strong>${esc(evt.host)}</strong></div>
+      <div><span>預估減碳</span><strong>${evt.carbonSavedKg} kg CO₂e</strong></div>
+    </div>
+
+    <section class="event-detail-section">
+      <h3>活動內容詳情</h3>
+      <p>${esc(evt.description)}</p>
+    </section>
+
+    <section class="event-detail-section">
+      <h3>活動亮點與流程</h3>
+      <ul class="event-highlights-list">
+        ${evt.highlights.map(h => `<li>${icon('check-circle', 16)}<span>${esc(h)}</span></li>`).join('')}
+      </ul>
+    </section>
+
+    <section class="event-rsvp-container" id="event-rsvp-box">
+      ${renderRsvpSection(evt)}
+    </section>
+
+    <div class="event-sheet-footer-actions">
+      <button class="secondary-button" data-calendar-share="${evt.id}">${icon('share', 16)} 複製活動資訊</button>
+    </div>
+  </div>`;
+}
+
+function openEventSheet(eventId) {
+  const evt = getEvent(eventId);
+  if (!evt) return;
+  host.showSheet(evt.typeLabel, renderEventDetailSheet(evt));
+}
+
+function renderList() {
+  currentId = null;
+  const root = document.querySelector('#app');
+  if (subView === 'calendar') {
+    root.innerHTML = `${header()}<main class="home-view shop-view" id="shop-scroll">
+      <section class="shop-intro">
+        <h2>Re-KEA 循環活動日曆</h2>
+        <p>週末二手尋寶市集 · 工坊木作修繕 DIY · 五金零件免費交換所</p>
+      </section>
+      ${shopTabsNav()}
+      ${renderCalendarView()}
+      <p class="archive-caption">每件家具，都值得下一段故事。<br>活動與席位預約為互動示範</p>
+    </main>${host.nav()}`;
+    document.title = '循環活動日曆 · 館藏 — Archive';
+  } else {
+    root.innerHTML = `${header()}<main class="home-view shop-view" id="shop-scroll">
+      <section class="shop-intro">
+        <h2>Re-KEA再生系列家具館藏</h2>
+        <p>每件作品皆於各地工坊進行修繕，延續它的故事</p>
+      </section>
+      ${shopTabsNav()}
+      ${shopEventBanner()}
+      ${searchTools()}
+      <div class="shop-result-meta"><span id="shop-count" aria-live="polite"></span><span>附完整工坊修復認證</span></div>
+      <section class="shop-results" id="shop-results" aria-label="再生家具列表"></section>
+      <p class="archive-caption">每件家具，都值得下一段故事。<br>館藏與訂單流程為互動示範</p>
+    </main>${host.nav()}`;
+    updateResults();
+    document.title = '館藏 — Archive';
+  }
+  const scrollContainer = document.querySelector('#shop-scroll');
+  if (scrollContainer) scrollContainer.scrollTop = listScroll;
+}
+
+const textBlock = (heading, text) => `<section class="shop-info-block"><h3>${heading}</h3><p>${esc(text)}</p></section>`;
+
+function detailPanel(item) {
+  if (tab === 'recipe')
+    return `<div class="shop-source-pieces">${item.sourcePieces.map((source, index) => `<div><span>拆解來源系列 ${index === 0 ? 'A' : 'B'}</span><p>${esc(source)}</p></div>`).join('')}</div><section class="shop-info-block"><h3>設計師驗證零件配方</h3><ul>${item.partsRecipe.map(part => `<li>${esc(part)}</li>`).join('')}</ul></section>${textBlock('孔位與尺寸相容性驗證', item.compatibilityNote)}${textBlock('工坊重組工序摘要', item.restorationSummary)}`;
+  if (tab === 'lifecycle')
+    return `${textBlock('跟著人生階段走', item.lifeStageJourney)}${textBlock('回應的真實生活需求', item.demandResponse)}<section class="shop-info-block"><h3>歷程溯源紀錄</h3><ol class="shop-timeline">${item.timeline.map(step => `<li><span>${step.year}</span><div><p>${esc(step.event)}</p><small>${esc(step.location)}${step.artisan ? ` · 設計師／職人：${esc(step.artisan)}` : ''}</small></div></li>`).join('')}</ol></section>`;
+  return `<section class="shop-info-block"><h3>材料可循環指數</h3><p class="shop-metric-value">${item.circularityIndex}%</p><meter min="0" max="100" value="${item.circularityIndex}" aria-label="材料可循環指數">${item.circularityIndex}%</meter><p>冷軋鋼材、蜂巢板、壓克力漆纖維板、強化玻璃與再生聚丙烯皆可模組拆解再利用。</p></section><section class="shop-info-block"><h3>隱含碳排封存量</h3><p class="shop-metric-value">${item.carbonSavedKg} <small>kg CO₂e</small></p><p>預計再延續 +${item.lifespanAddedYears} 年安心使用壽命。</p></section>`;
+}
+
+function renderProduct(item) {
+  if (currentId !== item.id) {
+    tab = 'recipe';
+    finish = item.finishOptions[0];
+  }
+  currentId = item.id;
+  document.querySelector('#app').innerHTML = `${header(true)}<main class="home-view shop-view shop-detail"><div class="shop-detail-image"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="800" height="600"></div><div class="shop-detail-body"><p class="shop-detail-meta">${esc(item.designer)} · ${item.grade} · ${item.eraYear} 年製</p><h2>${esc(item.name)}</h2><p class="shop-grade-note">${esc(item.gradeNote)}</p><div class="shop-detail-price"><strong>${money(item.price)}</strong><s>新品原價 ${money(item.originalRetailPrice)}</s></div><p class="shop-availability">${icon('check', 14)} 孤品現貨 1 件 <span>護照 ${item.provenanceId}</span></p><div class="shop-specs"><dl><dt>材質結構</dt><dd>${esc(item.material)}</dd><dt>實際尺寸</dt><dd>${esc(item.dimensions)}</dd><dt>再生工坊</dt><dd>${esc(item.workshop)}</dd></dl></div><fieldset class="shop-finishes"><legend>選擇成品外觀與保護塗層</legend>${item.finishOptions.map(option => `<label><input type="radio" name="shop-finish" value="${esc(option)}" ${finish === option ? 'checked' : ''}><span>${esc(option)}</span></label>`).join('')}</fieldset><div class="shop-detail-tabs" role="tablist" aria-label="家具配方與履歷分頁">${[['recipe', '零件配方驗證'], ['lifecycle', '人生階段履歷'], ['metrics', '循環減碳指標']].map(([id, label]) => `<button role="tab" id="shop-tab-${id}" data-shop="tab" data-value="${id}" aria-controls="shop-panel" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}">${label}</button>`).join('')}</div><div class="shop-panel" id="shop-panel" role="tabpanel" aria-labelledby="shop-tab-${tab}">${detailPanel(item)}</div></div></main><div class="shop-purchase-bar"><span>減少 ${item.carbonSavedKg} kg CO₂e<strong>${money(item.price)}</strong></span><button class="primary-button" data-shop="add">加入購物袋</button></div>${host.nav()}`;
+  document.title = `${item.name} · 館藏 — Archive`;
+}
+
+function summary() {
+  const sum = totals();
+  return `<dl class="shop-summary"><div><dt>家具小計</dt><dd>${money(sum.subtotal)}</dd></div><div><dt>專車包覆定位運費</dt><dd>${sum.delivery ? money(sum.delivery) : '免運費'}</dd></div><div class="shop-total"><dt>應付總金額</dt><dd>${money(sum.total)}</dd></div></dl>`;
+}
+
+function bagLine(entry, index) {
+  const item = product(entry.id);
+  return `<article class="shop-bag-line"><img src="${item.image}" alt="${esc(item.imageAlt)}" width="80" height="80"><div><h3>${esc(item.name)}</h3><p>${esc(entry.finish)}</p><div class="shop-bag-line-controls"><div class="shop-quantity"><button data-shop="quantity" data-index="${index}" data-delta="-1" aria-label="減少 ${esc(item.name)} 數量">${icon('minus', 15)}</button><span>${entry.quantity}</span><button data-shop="quantity" data-index="${index}" data-delta="1" aria-label="增加 ${esc(item.name)} 數量">${icon('plus', 15)}</button></div><strong>${money(item.price * entry.quantity)}</strong></div><button class="shop-remove" data-shop="remove" data-index="${index}">移除</button></div></article>`;
+}
+
+function showBag() {
+  if (checkoutStep === 'confirmed' && order) {
+    host.showSheet(
+      '已確認家具保留訂單',
+      `<div class="shop-order-confirmation">${icon('check-circle', 42)}<p class="shop-order-number">訂單編號 #${order.number}</p><h3>正在為您安排專車定位配送</h3><p>感謝您，${esc(order.customer.name)}。工坊團隊將於 24 小時內致電與您確認送達 ${esc(order.customer.postal)} ${esc(order.customer.address)} 的最適合時段，並提供進屋定位與養護說明。</p><p class="demo-note">此為互動示範，未送出真實訂單或安排配送。</p><button class="primary-button" data-shop="continue">繼續瀏覽館藏</button></div>`
+    );
+    return;
+  }
+  if (!bag.length) {
+    checkoutStep = 'bag';
+    host.showSheet(
+      '您的循環購物袋',
+      `<div class="shop-empty">${icon('shopping-bag', 35)}<h3>您的購物袋目前沒有家具。</h3><p>可於精選館藏保留修復完成的再生作品。</p><button class="primary-button" data-shop="continue">繼續瀏覽館藏</button></div>`
+    );
+    return;
+  }
+  const sum = totals();
+  if (checkoutStep === 'bag') {
+    host.showSheet(
+      '您的循環購物袋',
+      `<p class="shop-bag-meta">共 ${sum.count} 件 · 減少 ${sum.carbon.toFixed(1)} kg CO₂e</p>${bag.map(bagLine).join('')}${summary()}<button class="primary-button" data-shop="checkout">填寫台灣配送與聯絡資料 ${icon('arrow-right', 18)}</button>`
+    );
+  } else {
+    host.showSheet(
+      '配送與聯絡資料',
+      `<p class="shop-checkout-copy">單筆滿 NT$15,000 即享台灣本島都會區專車免費配送到府。支援貨到驗收確認後付款或線上轉帳。</p><form id="shop-checkout-form">${[
+        ['name', '收件人姓名', 'text', '林佳穎', 'name'],
+        ['phone', '聯絡手機號碼', 'tel', '0912-345-678', 'tel'],
+        ['postal', '郵遞區號與縣市區域', 'text', '106 台北市大安區', 'postal-code'],
+        ['address', '詳細配送地址（含樓層或電梯說明）', 'text', '仁愛路四段 112 巷 8 號 3 樓（有電梯）', 'street-address'],
+      ]
+        .map(
+          ([name, label, type, placeholder, autocomplete]) =>
+            `<label class="field">${label}<input required name="${name}" type="${type}" autocomplete="${autocomplete}" placeholder="${placeholder}" value="${esc(customer[name])}" data-shop-customer="${name}"></label>`
+        )
+        .join('')}${summary()}<p class="shop-checkout-note">訂單流程為互動示範，資料不會送出。</p><div class="shop-checkout-actions"><button class="secondary-button" type="button" data-shop="back-bag">返回</button><button class="primary-button" type="submit">確認保留家具訂單</button></div></form>`
+    );
+  }
+}
+
+export function renderCollectionRoute(options) {
+  host = options;
+  const match = /^#\/collection(?:\/(item|calendar)(?:\/([^/]+))?)?\/?$/.exec(location.hash);
+  if (!match) return false;
+
+  if (match[1] === 'item') {
+    let item;
+    try {
+      item = product(decodeURIComponent(match[2]));
+    } catch {}
+    if (item) renderProduct(item);
+    else {
+      history.replaceState(null, '', '#/collection');
+      subView = 'furniture';
+      renderList();
+    }
+  } else if (match[1] === 'calendar') {
+    subView = 'calendar';
+    renderList();
+    if (match[2]) {
+      openEventSheet(decodeURIComponent(match[2]));
+    }
+  } else {
+    subView = 'furniture';
+    renderList();
+  }
+  return true;
+}
+
+function setTab(next) {
+  tab = next;
+  document.querySelectorAll('[data-shop="tab"]').forEach(button => {
+    button.setAttribute('aria-selected', button.dataset.value === tab);
+    button.tabIndex = button.dataset.value === tab ? 0 : -1;
+  });
+  const panel = document.querySelector('#shop-panel');
+  if (panel) {
+    panel.innerHTML = detailPanel(product(currentId));
+    panel.setAttribute('aria-labelledby', `shop-tab-${tab}`);
+  }
+}
+
+document.addEventListener('click', event => {
+  if (!host) return;
+
+  // View switch between furniture and calendar
+  const viewSwitch = event.target.closest('[data-shop-view]');
+  if (viewSwitch) {
+    subView = viewSwitch.dataset.shopView;
+    listScroll = 0;
+    location.hash = subView === 'calendar' ? '#/collection/calendar' : '#/collection';
+    renderList();
+    return;
+  }
+
+  // Calendar navigation & actions
+  const calAction = event.target.closest('[data-calendar-action]');
+  if (calAction) {
+    const act = calAction.dataset.calendarAction;
+    if (act === 'prev-month') {
+      calMonth--;
+      if (calMonth < 0) {
+        calMonth = 11;
+        calYear--;
+      }
+    } else if (act === 'next-month') {
+      calMonth++;
+      if (calMonth > 11) {
+        calMonth = 0;
+        calYear++;
+      }
+    } else if (act === 'today') {
+      calYear = 2026;
+      calMonth = 10;
+      selectedDate = '2026-11-17';
+    }
+    renderList();
+    return;
+  }
+
+  const calFilter = event.target.closest('[data-calendar-filter]');
+  if (calFilter) {
+    eventFilter = calFilter.dataset.calendarFilter;
+    renderList();
+    return;
+  }
+
+  const calDate = event.target.closest('[data-calendar-date]');
+  if (calDate) {
+    selectedDate = calDate.dataset.calendarDate;
+    renderList();
+    return;
+  }
+
+  const calEvent = event.target.closest('[data-calendar-event]');
+  if (calEvent) {
+    openEventSheet(calEvent.dataset.calendarEvent);
+    return;
+  }
+
+  const calCancel = event.target.closest('[data-calendar-cancel]');
+  if (calCancel) {
+    const id = calCancel.dataset.calendarCancel;
+    delete rsvps[id];
+    try {
+      localStorage.setItem(RSVP_STORE, JSON.stringify(rsvps));
+    } catch {}
+    host.toast('已為您取消活動席位預約。');
+    openEventSheet(id);
+    renderList();
+    return;
+  }
+
+  const calShare = event.target.closest('[data-calendar-share]');
+  if (calShare) {
+    const evt = getEvent(calShare.dataset.calendarShare);
+    if (evt) {
+      const text = `${evt.title}\n📅 ${evt.date} (${evt.weekday}) ${evt.time}\n📍 ${evt.location}\n${location.origin}${location.pathname}#/collection/calendar/${evt.id}`;
+      try {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text);
+          host.toast('已複製活動資訊至剪貼簿！');
+        } else {
+          host.toast('已備妥活動資訊');
+        }
+      } catch {
+        host.toast('已備妥活動資訊');
+      }
+    }
+    return;
+  }
+
+  const button = event.target.closest('[data-shop]');
+  if (!button) return;
+  const { shop, id, value, index, delta } = button.dataset;
+  if (shop === 'back-to-furniture') {
+    subView = 'furniture';
+    location.hash = '#/collection';
+    renderList();
+    return;
+  }
+  if (shop === 'product') {
+    listScroll = document.querySelector('#shop-scroll')?.scrollTop || 0;
+    go(id);
+  }
+  if (shop === 'back') go();
+  if (shop === 'category') {
+    filters.category = value;
+    updateResults();
+  }
+  if (shop === 'reset') {
+    filters = { query: '', category: '全部', grade: '全部', growth: false, sort: 'curated' };
+    listScroll = 0;
+    renderList();
+    document.querySelector('[data-shop-filter="query"]')?.focus();
+  }
+  if (shop === 'tab') setTab(value);
+  if (shop === 'bag') {
+    checkoutStep = 'bag';
+    showBag();
+  }
+  if (shop === 'add' || shop === 'quick-add') {
+    const item = product(id || currentId);
+    bag = addToBag(bag, item, id ? item.finishOptions[0] : finish);
+    persist();
+    checkoutStep = 'bag';
+    showBag();
+  }
+  if (shop === 'quantity') {
+    bag = changeQuantity(bag, Number(index), Number(delta));
+    persist();
+    showBag();
+  }
+  if (shop === 'remove') {
+    bag = bag.filter((_, i) => i !== Number(index));
+    persist();
+    showBag();
+  }
+  if (shop === 'checkout') {
+    checkoutStep = 'details';
+    showBag();
+  }
+  if (shop === 'back-bag') {
+    checkoutStep = 'bag';
+    showBag();
+  }
+  if (shop === 'continue') {
+    checkoutStep = 'bag';
+    host.closeSheet();
+    go();
+  }
 });
-document.addEventListener('input',event=>{const control=event.target;if(control.dataset.shopFilter==='query'){filters.query=control.value;updateResults();}if(control.dataset.shopCustomer){customer[control.dataset.shopCustomer]=control.value;control.setCustomValidity('');}});
-document.addEventListener('change',event=>{const control=event.target;if(control.dataset.shopFilter&&control.dataset.shopFilter!=='query'){filters[control.dataset.shopFilter]=control.type==='checkbox'?control.checked:control.value;updateResults();}if(control.name==='shop-finish')finish=control.value;});
-document.addEventListener('keydown',event=>{const active=event.target.closest('[data-shop="tab"]');if(!active||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tabs=['recipe','lifecycle','metrics'];const index=tabs.indexOf(tab);const next=event.key==='Home'?0:event.key==='End'?2:(index+(event.key==='ArrowRight'?1:2))%3;setTab(tabs[next]);document.querySelector(`#shop-tab-${tab}`).focus();});
-document.addEventListener('submit',event=>{if(event.target.id!=='shop-checkout-form')return;event.preventDefault();if(!event.target.reportValidity()||!bag.length)return;const blank=[...event.target.querySelectorAll('[data-shop-customer]')].find(input=>!input.value.trim());if(blank){blank.setCustomValidity('請填寫此欄位，不能只有空白。');blank.reportValidity();return;}const data=new FormData(event.target);const uuid=globalThis.crypto?.randomUUID?.()||Date.now().toString(36);order={number:`ATR-${uuid.slice(0,8).toUpperCase()}`,customer:Object.fromEntries(data)};bag=[];persist();checkoutStep='confirmed';showBag();Object.keys(customer).forEach(key=>customer[key]='');});
+
+document.addEventListener('input', event => {
+  const control = event.target;
+  if (control.dataset.shopFilter === 'query') {
+    filters.query = control.value;
+    updateResults();
+  }
+  if (control.dataset.shopCustomer) {
+    customer[control.dataset.shopCustomer] = control.value;
+    control.setCustomValidity('');
+  }
+});
+
+document.addEventListener('change', event => {
+  const control = event.target;
+  if (control.dataset.shopFilter && control.dataset.shopFilter !== 'query') {
+    filters[control.dataset.shopFilter] = control.type === 'checkbox' ? control.checked : control.value;
+    updateResults();
+  }
+  if (control.name === 'shop-finish') finish = control.value;
+});
+
+document.addEventListener('keydown', event => {
+  const active = event.target.closest('[data-shop="tab"]');
+  if (!active || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const tabs = ['recipe', 'lifecycle', 'metrics'];
+  const index = tabs.indexOf(tab);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3;
+  setTab(tabs[next]);
+  document.querySelector(`#shop-tab-${tab}`)?.focus();
+});
+
+document.addEventListener('submit', event => {
+  if (event.target.id === 'calendar-rsvp-form') {
+    event.preventDefault();
+    const form = event.target;
+    const eventId = form.dataset.eventId;
+    const evt = getEvent(eventId);
+    if (!evt) return;
+    const formData = new FormData(form);
+    const name = formData.get('name')?.toString().trim();
+    const phone = formData.get('phone')?.toString().trim();
+    const guests = Number(formData.get('guests')) || 1;
+    if (!name || !phone) {
+      host.toast('請填寫姓名與聯絡電話');
+      return;
+    }
+    customer.name = name;
+    customer.phone = phone;
+    const code = `EVT-${evt.date.replace(/-/g, '').slice(2)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const now = new Date();
+    const bookedAt = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    rsvps[eventId] = { code, name, phone, guests, bookedAt };
+    try {
+      localStorage.setItem(RSVP_STORE, JSON.stringify(rsvps));
+    } catch {}
+    host.toast(`已成功預約 ${evt.title}！`);
+    openEventSheet(eventId);
+    renderList();
+    return;
+  }
+
+  if (event.target.id !== 'shop-checkout-form') return;
+  event.preventDefault();
+  if (!event.target.reportValidity() || !bag.length) return;
+  const blank = [...event.target.querySelectorAll('[data-shop-customer]')].find(input => !input.value.trim());
+  if (blank) {
+    blank.setCustomValidity('請填寫此欄位，不能只有空白。');
+    blank.reportValidity();
+    return;
+  }
+  const data = new FormData(event.target);
+  const uuid = globalThis.crypto?.randomUUID?.() || Date.now().toString(36);
+  order = { number: `ATR-${uuid.slice(0, 8).toUpperCase()}`, customer: Object.fromEntries(data) };
+  bag = [];
+  persist();
+  checkoutStep = 'confirmed';
+  showBag();
+  Object.keys(customer).forEach(key => (customer[key] = ''));
+});

@@ -28,3 +28,45 @@ test('saved bag restores only valid catalog products, finishes and positive whol
   assert.deepEqual(shop.restoreBag('broken',items),[]);
   assert.deepEqual(shop.restoreBag(JSON.stringify([{id:'desk',finish:'白',quantity:2},{id:'gone',finish:'白',quantity:2},{id:'chair',finish:'灰',quantity:-1},{id:'desk',finish:'missing',quantity:1}]),items),[{id:'desk',finish:'白',quantity:2}]);
 });
+
+test('calendar filters events by category, month, and search query', () => {
+  const sampleEvents = [
+    { id: 'e1', title: 'Re-KEA 週末市集', type: 'market', date: '2026-11-21', summary: '換物市集' },
+    { id: 'e2', title: 'DIY 木作修繕', type: 'diy', date: '2026-11-22', summary: '椅凳改造' },
+    { id: 'e3', title: '冬日回收市集', type: 'market', date: '2026-12-05', summary: '台中場' }
+  ];
+  assert.equal(shop.filterEvents(sampleEvents, { category: 'market' }).length, 2);
+  assert.equal(shop.filterEvents(sampleEvents, { category: 'diy' }).length, 1);
+  assert.equal(shop.filterEvents(sampleEvents, { month: '2026-11' }).length, 2);
+  assert.deepEqual(shop.filterEvents(sampleEvents, { query: '椅凳' }).map(e => e.id), ['e2']);
+  assert.deepEqual(shop.getEventsForDate(sampleEvents, '2026-11-21').map(e => e.id), ['e1']);
+  assert.deepEqual(shop.getEventsForDate(sampleEvents, '2026-11-23'), []);
+  assert.deepEqual(shop.getUpcomingEvents(sampleEvents, '2026-11-22', 2).map(e => e.id), ['e2', 'e3']);
+});
+
+test('calendar month grid cells maintain 7-column layout and correct dates', () => {
+  const cells = shop.getMonthCalendarCells(2026, 10); // Nov 2026
+  assert.equal(cells.length % 7, 0);
+  assert.ok(cells.length >= 35);
+  // Nov 1, 2026 is Sunday, so first cell is Nov 1
+  const nov1 = cells.find(c => c.dateStr === '2026-11-01');
+  assert.ok(nov1);
+  assert.equal(nov1.isCurrentMonth, true);
+  const nov30 = cells.find(c => c.dateStr === '2026-11-30');
+  assert.ok(nov30);
+  assert.equal(nov30.isCurrentMonth, true);
+});
+
+test('restoreRsvps parses valid reservations and discards invalid payloads', () => {
+  assert.deepEqual(shop.restoreRsvps('broken'), {});
+  assert.deepEqual(shop.restoreRsvps(null), {});
+  const stored = JSON.stringify({
+    'evt-1': { code: 'EVT-123', name: '王大明', phone: '0912345678', guests: 2, bookedAt: '2026/11/17 14:00' },
+    'invalid': { missing: true }
+  });
+  const restored = shop.restoreRsvps(stored);
+  assert.equal(restored['evt-1'].name, '王大明');
+  assert.equal(restored['evt-1'].guests, 2);
+  assert.equal(restored.invalid, undefined);
+});
+
